@@ -24,6 +24,10 @@ Currently, our server ""fakes"" locking by generating a UUID lock token on LOCK 
 Class {
 	#name : 'ZagWebDav',
 	#superclass : 'Object',
+	#classVars : [
+		'BinaryMappings',
+		'ReverseBinaryMappings'
+	],
 	#classInstVars : [
 		'server'
 	],
@@ -31,6 +35,58 @@ Class {
 	#package : 'Zag-WebDav',
 	#tag : 'Core'
 }
+
+{ #category : 'class initialization' }
+ZagWebDav class >> initialize [
+
+	<script>
+	BinaryMappings := {
+		                  (#+ -> 'op_plus').
+		                  (#- -> 'op_minus').
+		                  (#* -> 'op_times').
+		                  (#/ -> 'op_slash').
+		                  (#'\\' -> 'op_modulo').
+		                  (#= -> 'op_equals').
+		                  (#'==' -> 'op_identical').
+		                  (#'~=' -> 'op_not_equals').
+		                  (#< -> 'op_less').
+		                  (#'<=' -> 'op_less_equal').
+		                  (#> -> 'op_greater').
+		                  (#'>=' -> 'op_greater_equal').
+		                  (#@ -> 'op_at').
+		                  (#, -> 'op_comma').
+		                  (#~ -> 'op_tilde').
+		                  (#| -> 'op_pipe').
+		                  (#& -> 'op_and').
+		                  (#'=~' -> 'op_nearly_equal').
+		                  (#'@@' -> 'op_compose').
+		                  (#'\\=' -> 'op_array_modulo').
+		                  (#'**' -> 'op_raisedTo').
+		                  (#'*=' -> 'op_array_times').
+		                  (#'//' -> 'op_truncate_divide').
+		                  (#'-=' -> 'op_array_minus').
+		                  (#'==>' -> 'op_').
+		                  (#'->' -> 'op_').
+		                  (#'~>' -> 'op_').
+		                  (#'>>' -> 'op_').
+		                  (#'--' -> 'op_').
+		                  (#'~~>' -> 'op_').
+		                  (#\ -> 'op_').
+		                  (#'\\\' -> 'op_').
+		                  (#% -> 'op_').
+		                  (#'~~' -> 'op_').
+		                  (#'=>' -> 'op_').
+		                  (#'+=' -> 'op_array_plus').
+		                  (#'<<' -> 'op_').
+		                  (#'+*' -> 'op_').
+		                  (#'/=' -> 'op_array_divide').
+		                  (#'@=' -> 'op_trait_compose').
+		                  (#'>>>' -> 'op_pair').
+		                  (#'<-' -> 'op_from_array').
+		                  (#? -> 'op_query') } asDictionary.
+	ReverseBinaryMappings := Dictionary new.
+	BinaryMappings keysAndValuesDo: [ :key :value | ReverseBinaryMappings at: value put: key ]
+]
 
 { #category : 'accessing' }
 ZagWebDav class >> start [
@@ -54,23 +110,27 @@ ZagWebDav class >> stop [
 
 { #category : 'private' }
 ZagWebDav >> decodeSelector: aFilenameString [
-    "Strips the .st extension and converts filename-safe characters back to a Smalltalk selector"
-    | baseName decodedString |
-    
-    "1. Remove the file extension"
-    baseName := aFilenameString withoutSuffix: '.st'.
-    
-    "2. Convert underscores back to colons"
-    decodedString := baseName copyReplaceAll: '_' with: ':'.
-    
-    "3. Return as a Symbol so it can be used to look up the method"
-    ^ decodedString asSymbol.
+	"Strips the .st extension and converts filename-safe characters back to a Smalltalk selector"
+
+	| baseName |
+	"Remove the file extension"
+	baseName := aFilenameString withoutSuffix: '.st'.
+	
+	ReverseBinaryMappings at: baseName ifPresent: [ : s | ^ s ].
+
+	"2. Convert underscores back to colons"
+	^ (baseName copyReplaceAll: '_' with: ':') asSymbol
 ]
 
 { #category : 'private' }
 ZagWebDav >> encodeSelector: aSymbol [
-    "Replaces colons with underscores for file system compatibility"
-    ^ aSymbol asString copyReplaceAll: ':' with: '_'
+	" encode binary operators "
+
+	aSymbol isBinary ifTrue: [
+		^ (BinaryMappings at: aSymbol asSymbol ifAbsentPut: [ String streamContents: [ :s | s << 'op' ] ]) ].
+
+	"Replaces colons with underscores for file system compatibility"
+	^ aSymbol asString copyReplaceAll: ':' with: '_'
 ]
 
 { #category : 'private' }
