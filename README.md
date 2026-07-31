@@ -14,3 +14,11 @@ Once mounted you can open any class with `zed /Volumes/127.0.0.1/class/OrderedCo
 This has no security enabled, so it exposes the image to any program on localhost.
 
 This is a work in progress, so new features will be added.
+
+#### Loading
+```smalltalk
+Metacello new
+  repository: 'github://Zag-Research/Zag-GUI:main';
+  baseline: 'ZagWebDav';
+  load.
+```
