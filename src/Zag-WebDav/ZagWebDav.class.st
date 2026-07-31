@@ -93,6 +93,8 @@ ZagWebDav class >> start [
 	"Start a basic HTTP server on port 8383"
 
 	<script>
+	
+	self stop.
 	server := ZnServer startOn: 8383.
 
 	"Set up a delegate to intercept requests"
@@ -104,7 +106,7 @@ ZagWebDav class >> stop [
 	" stop HTTP server "
 
 	<script>
-	server stop.
+	server ifNotNil: [ server stop].
 	server := nil
 ]
 
