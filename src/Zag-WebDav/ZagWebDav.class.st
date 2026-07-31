@@ -1,7 +1,25 @@
 "
 I am a WebDav client.
 
-My primary motivation is to serve Packages, Classes, and Methds to an editor such as Zed.
+My primary motivation is to serve Packages, Classes, and Methods to an editor such as Zed.
+
+However it would be nice to have a full-functioning WebDav server.
+
+### What is Missing for a Full WebDAV Server?
+Right now, we have built a minimal read/write WebDAV adapter. It implements just enough of RFC 4918 for an OS file system or editor to read virtual files and write back modifications. To become a fully compliant WebDAV server, here is what is missing:
+
+#### Real Lock Semantics (RFC 4918 Section 6 & 7)
+Currently, our server ""fakes"" locking by generating a UUID lock token on LOCK and accepting every write. In a fully compliant server, lock semantics require:
+1. **Lock Registry:** A central manager mapping Lock Tokens to URIs, client identity, lock type (Exclusive vs. Shared), and expiry timestamps (Timeout: Second-3600).
+2. **The If: Header Enforcement:** When a file is locked, clients send subsequent PUT, DELETE, or PROPPATCH requests with an If: header containing the token (e.g., If: (<opaquelocktoken:1234...>)). If the header is missing or the token doesn't match, the server must reject the operation with 423 Locked.
+3. **Lock Refreshing:** Clients send LOCK requests without a body on an already-locked resource to reset the timeout timer.
+4. **Depth-Based Locks:** Locking a directory (Depth: infinity) must recursively lock every child method and file inside that folder.
+#### Other Protocol Features Missing
+1. **PROPPATCH:** Allows clients to set custom key-value metadata on files (like macOS tags or color labels).
+2. **MKCOL:** Standard command for creating new directories (creating a new Smalltalk Package or Class).
+3. **COPY / MOVE:** Handles file renaming and moving (which in your domain would translate to renameClass:, compile:inCategory:, or refactoring selectors).
+4. **DELETE:** Handles deleting files/folders (removing methods or unhousing classes).
+5. **ETags & Conditional Requests:** If-Match and If-None-Match headers using entity tags to prevent two clients from overwriting each other's changes if locking isn't used.
 "
 Class {
 	#name : 'ZagWebDav',
@@ -254,7 +272,7 @@ ZagWebDav >> makeXmlNodeFor: hrefPath isDir: isDir [
 		             ifFalse: [ hrefPath ].
 
 	displayName := (cleanPath isEmptyOrNil or: [ cleanPath = '/' ])
-		               ifTrue: [ 'Pharo' ]
+		               ifTrue: [ Smalltalk image shortImageName withoutSuffix: '.image'. ]
 		               ifFalse: [ cleanPath copyAfterLast: $/ ].
 
 	urlEncodedHref := formattedHref copyReplaceAll: ' ' with: '%20'.
