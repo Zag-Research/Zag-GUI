@@ -4,8 +4,8 @@ Please describe the package using the class comment of the included manifest cla
 Class {
 	#name : 'ManifestBaselineOfZagWebDav',
 	#superclass : 'PackageManifest',
-	#category : 'BaselineOfZag_WebDav-Manifest',
-	#package : 'BaselineOfZag_WebDav',
+	#category : 'BaselineOfZagWebDav-Manifest',
+	#package : 'BaselineOfZagWebDav',
 	#tag : 'Manifest'
 }
 
@@ -13,5 +13,5 @@ Class {
 ManifestBaselineOfZagWebDav class >> ruleClassNotReferencedRuleV1FalsePositive [
 
 	<ignoreForCoverage>
-	^ #(#(#(#RGClassDefinition #(#BaselineOfZag_WebDav)) #'2026-07-31T09:43:56.151322-04:00') )
+	^ #(#(#(#RGClassDefinition #(#BaselineOfZagWebDav)) #'2026-07-31T10:58:21.577531-04:00') )
 ]
