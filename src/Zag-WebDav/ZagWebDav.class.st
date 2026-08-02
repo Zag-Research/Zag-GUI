@@ -3,6 +3,10 @@ I am a WebDav client.
 
 My primary motivation is to serve Packages, Classes, and Methods to an editor such as Zed.
 
+### API:
+- `ZagWebDav start` - start a server on default port
+- `ZagWebDav stop` - stop the server
+
 However it would be nice to have a full-functioning WebDav server.
 
 ### What is Missing for a Full WebDAV Server?
@@ -19,13 +23,14 @@ Currently, our server ""fakes"" locking by generating a UUID lock token on LOCK 
 2. **MKCOL:** Standard command for creating new directories (creating a new Smalltalk Package or Class).
 3. **COPY / MOVE:** Handles file renaming and moving (which in your domain would translate to renameClass:, compile:inCategory:, or refactoring selectors).
 4. **DELETE:** Handles deleting files/folders (removing methods or unhousing classes).
-5. **ETags & Conditional Requests:** If-Match and If-None-Match headers using entity tags to prevent two clients from overwriting each other's changes if locking isn't used.
+5. **ETags & Conditional Requests:** If-Match and If-None-Match headers using entity tags to prevent two clients from overwriting each other's changes if locking isn't used. An etag is a version number of a file, used for caching and preventing overwrite if a file has changed since read.
 "
 Class {
 	#name : 'ZagWebDav',
 	#superclass : 'Object',
 	#classVars : [
 		'BinaryMappings',
+		'Colon',
 		'ReverseBinaryMappings'
 	],
 	#classInstVars : [
@@ -40,52 +45,68 @@ Class {
 ZagWebDav class >> initialize [
 
 	<script>
+	Colon := (Character codePoint: 16rA789) asString.
 	BinaryMappings := {
-		                  (#+ -> 'op_plus').
-		                  (#- -> 'op_minus').
-		                  (#* -> 'op_times').
-		                  (#/ -> 'op_slash').
-		                  (#'\\' -> 'op_modulo').
-		                  (#= -> 'op_equals').
-		                  (#'==' -> 'op_identical').
-		                  (#'~=' -> 'op_not_equals').
-		                  (#< -> 'op_less').
-		                  (#'<=' -> 'op_less_equal').
-		                  (#> -> 'op_greater').
-		                  (#'>=' -> 'op_greater_equal').
-		                  (#@ -> 'op_at').
-		                  (#, -> 'op_comma').
-		                  (#~ -> 'op_tilde').
-		                  (#| -> 'op_pipe').
-		                  (#& -> 'op_and').
-		                  (#'=~' -> 'op_nearly_equal').
-		                  (#'@@' -> 'op_compose').
-		                  (#'\\=' -> 'op_array_modulo').
-		                  (#'**' -> 'op_raisedTo').
-		                  (#'*=' -> 'op_array_times').
-		                  (#'//' -> 'op_truncate_divide').
-		                  (#'-=' -> 'op_array_minus').
-		                  (#'==>' -> 'op_').
-		                  (#'->' -> 'op_').
-		                  (#'~>' -> 'op_').
-		                  (#'>>' -> 'op_').
-		                  (#'--' -> 'op_').
-		                  (#'~~>' -> 'op_').
-		                  (#\ -> 'op_').
-		                  (#'\\\' -> 'op_').
-		                  (#% -> 'op_').
-		                  (#'~~' -> 'op_').
-		                  (#'=>' -> 'op_').
-		                  (#'+=' -> 'op_array_plus').
-		                  (#'<<' -> 'op_').
-		                  (#'+*' -> 'op_').
-		                  (#'/=' -> 'op_array_divide').
-		                  (#'@=' -> 'op_trait_compose').
-		                  (#'>>>' -> 'op_pair').
-		                  (#'<-' -> 'op_from_array').
-		                  (#? -> 'op_query') } asDictionary.
+		                  (#+ -> '+').
+		                  (#- -> '-').
+		                  (#* -> '×').
+		                  (#/ -> '÷').
+		                  (#'\\' -> '⧵⧵').
+		                  (#= -> '=').
+		                  (#'==' -> '==').
+		                  (#'~=' -> '~=').
+		                  (#< -> '‹').
+		                  (#'<=' -> '≤').
+		                  (#> -> '›').
+		                  (#'>=' -> '≥').
+		                  (#@ -> '@').
+		                  (#, -> ',').
+		                  (#~ -> '~').
+		                  (#| -> '|').
+		                  (#& -> '&').
+		                  (#'=~' -> '=~').
+		                  (#'@@' -> '@@').
+		                  (#'\\=' -> '⧵⧵=').
+		                  (#'**' -> '××').
+		                  (#'*=' -> '×=').
+		                  (#'//' -> '÷÷').
+		                  (#'-=' -> '-=').
+		                  (#'==>' -> '==›').
+		                  (#'->' -> '-›').
+		                  (#'>>' -> '››').
+		                  (#'--' -> '--').
+		                  (#'~~>' -> '~~›').
+		                  (#\ -> '⧵').
+		                  (#'\\\' -> '⧵⧵⧵').
+		                  (#% -> '%').
+		                  (#'~~' -> '~~').
+		                  (#'=>' -> '=›').
+		                  (#'+=' -> '+=').
+		                  (#'<<' -> '_').
+		                  (#'+*' -> '+×').
+		                  (#'/=' -> '÷=').
+		                  (#'@=' -> '@=').
+		                  (#'>>>' -> '›››').
+		                  (#'<-' -> '‹-').
+		                  (#? -> '﹖') } asDictionary.
 	ReverseBinaryMappings := Dictionary new.
-	BinaryMappings keysAndValuesDo: [ :key :value | ReverseBinaryMappings at: value put: key ]
+	BinaryMappings keysAndValuesDo: [ :key :value | "	
+Selector,Unicode Character,Code Point,Resulting Filename,OS Compatibility
+>=,≥ (Greater than or equal),U+2265,≥.st,✅ All OSs
+<=,≤ (Less than or equal),U+2264,≤.st,✅ All OSs
+~=,≠ (Not equal),U+2260,≠.st,✅ All OSs
+==,≡ (Identical / Equivalent),U+2261,≡.st,✅ All OSs
+*,× (Multiplication sign),U+00D7,×.st,✅ All OSs (Replaces forbidden ASCII *)
+/,÷ (Division sign),U+00F7,÷.st,✅ All OSs (Replaces forbidden ASCII /)
+\,⧵ (Reverse solidus op),U+29F5,⧵.st,✅ All OSs (Replaces forbidden ASCII \)
+|,∣ (Divides / Vertical bar),U+2223,∣.st,✅ All OSs (Replaces forbidden ASCII |)
+<,‹ or ＜ (Single Guillemet / Fullwidth),U+2039 / U+FF1C,‹.st,✅ All OSs (Replaces forbidden ASCII <)
+>,› or ＞ (Single Guillemet / Fullwidth),U+203B / U+FF1E,›.st,✅ All OSs (Replaces forbidden ASCII >)
++,+ (ASCII Plus),U+002B,+.st,✅ All OSs
+-,- (ASCII Minus),U+002D,-.st,✅ All OSs
+@,@ (ASCII At),U+0040,@.st,✅ All OSs
+"","","", (ASCII Comma)"",U+002C,"","",✅ All OSs"
+		ReverseBinaryMappings at: value put: key ]
 ]
 
 { #category : 'accessing' }
@@ -93,12 +114,20 @@ ZagWebDav class >> start [
 	"Start a basic HTTP server on port 8383"
 
 	<script>
-	
+	^ self startOn: 8383
+]
+
+{ #category : 'accessing' }
+ZagWebDav class >> startOn: port [
+	"Start a basic HTTP server on port"
+
+	<script>
 	self stop.
-	server := ZnServer startOn: 8383.
+	server := ZnServer startOn: port.
 
 	"Set up a delegate to intercept requests"
-	server delegate: self new
+	server delegate: self new.
+	^ server
 ]
 
 { #category : 'accessing' }
@@ -117,11 +146,11 @@ ZagWebDav >> decodeSelector: aFilenameString [
 	| baseName |
 	"Remove the file extension"
 	baseName := aFilenameString withoutSuffix: '.st'.
-	
-	ReverseBinaryMappings at: baseName ifPresent: [ : s | ^ s ].
+
+	ReverseBinaryMappings at: baseName ifPresent: [ :s | ^ s ].
 
 	"2. Convert underscores back to colons"
-	^ (baseName copyReplaceAll: '_' with: ':') asSymbol
+	^ ((baseName copyReplaceAll: Colon with: ':') copyReplaceAll: '_' with: ':') asSymbol
 ]
 
 { #category : 'private' }
@@ -129,10 +158,10 @@ ZagWebDav >> encodeSelector: aSymbol [
 	" encode binary operators "
 
 	aSymbol isBinary ifTrue: [
-		^ (BinaryMappings at: aSymbol asSymbol ifAbsentPut: [ String streamContents: [ :s | s << 'op' ] ]) ].
+		^ BinaryMappings at: aSymbol asSymbol ifAbsentPut: [ String streamContents: [ :s | s << 'op_' << aSymbol ] ] ].
 
 	"Replaces colons with underscores for file system compatibility"
-	^ aSymbol asString copyReplaceAll: ':' with: '_'
+	^ aSymbol asString copyReplaceAll: ':' with: Colon
 ]
 
 { #category : 'private' }
@@ -153,7 +182,6 @@ ZagWebDav >> extractClassAndSelectorFrom: segments [
 	className := segments second.
 	fileName := segments third.
 
-	(fileName endsWith: '.st') ifFalse: [ ^ nil ].
 	class := Smalltalk globals at: className asSymbol ifAbsent: [ ^ nil ].
 	sel := self decodeSelector: fileName.
 
@@ -251,11 +279,11 @@ ZagWebDav >> handlePropfind: request [
         stream nextPutAll: '<?xml version="1.0" encoding="utf-8" ?><D:multistatus xmlns:D="DAV:">'.
         
         segments isEmptyOrNil ifTrue: [
-            stream nextPutAll: (self makeXmlNodeFor: '/' isDir: true).
+            stream nextPutAll: (self makeXmlNodeFor: '/' method: nil).
             depth = '1' ifTrue: [
-                stream nextPutAll: (self makeXmlNodeFor: '/class' isDir: true).
+                stream nextPutAll: (self makeXmlNodeFor: '/class' method: nil).
                 self systemPackages do: [ :pkg |
-                    stream nextPutAll: (self makeXmlNodeFor: '/', pkg name asString isDir: true).
+                    stream nextPutAll: (self makeXmlNodeFor: '/', pkg name asString method: nil).
                 ].
             ].
         ] ifFalse: [
@@ -319,9 +347,10 @@ ZagWebDav >> handleRequest: request [
 ]
 
 { #category : 'private' }
-ZagWebDav >> makeXmlNodeFor: hrefPath isDir: isDir [
+ZagWebDav >> makeXmlNodeFor: hrefPath method: compiledMethod [
 
-	| formattedHref cleanPath displayName urlEncodedHref escapedName |
+	| isDir formattedHref cleanPath displayName urlEncodedHref escapedName |
+	isDir := compiledMethod isNil.
 	formattedHref := isDir
 		                 ifTrue: [
 				                 (hrefPath endsWith: '/')
@@ -334,10 +363,9 @@ ZagWebDav >> makeXmlNodeFor: hrefPath isDir: isDir [
 		             ifFalse: [ hrefPath ].
 
 	displayName := (cleanPath isEmptyOrNil or: [ cleanPath = '/' ])
-		               ifTrue: [ Smalltalk image shortImageName withoutSuffix: '.image'. ]
+		               ifTrue: [ Smalltalk image shortImageName withoutSuffix: '.image' ]
 		               ifFalse: [ cleanPath copyAfterLast: $/ ].
-
-	urlEncodedHref := formattedHref copyReplaceAll: ' ' with: '%20'.
+	urlEncodedHref := formattedHref urlEncoded copyReplaceAll: '%2F' with: '/'.
 	escapedName := self escapeXml: displayName asString.
 
 	^ String streamContents: [ :s |
@@ -353,13 +381,18 @@ ZagWebDav >> makeXmlNodeFor: hrefPath isDir: isDir [
 			  s nextPutAll: '</D:resourcetype>'.
 
 			  isDir
-				  ifTrue: [ s nextPutAll: '<D:getcontenttype>httpd/unix-directory</D:getcontenttype><D:getetag>"dir-1"</D:getetag>' ]
+				  ifTrue: [
+						  s << '<D:getcontenttype>httpd/unix-directory</D:getcontenttype><D:getetag>"dir-1"</D:getetag>'
+						  << '<D:getlastmodified>Thu, 30 Jul 2026 12:00:00 GMT</D:getlastmodified>' ]
 				  ifFalse: [
-						  s nextPutAll:
-							  '<D:getcontentlength>100</D:getcontentlength><D:getcontenttype>text/plain</D:getcontenttype><D:getetag>"file-1"</D:getetag>' ].
+						  s << '<D:getcontentlength>' << compiledMethod sourceCode size asString << '</D:getcontentlength>'.
+						  s << '<D:getcontenttype>text/plain</D:getcontenttype>' << '<D:getetag>"file-1"</D:getetag>'.
+						  s << '<D:getlastmodified>' << (ZnUtils httpDate: (DateAndTime fromMethodTimestamp: compiledMethod timeStamp))
+						  << '</D:getlastmodified>' ].
 
-			  s nextPutAll:
-				  '<D:getlastmodified>Thu, 30 Jul 2026 12:00:00 GMT</D:getlastmodified></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>' ]
+
+			  s nextPutAll: '</D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>'.
+			  s nextPut: Character lf ]
 ]
 
 { #category : 'private' }
@@ -376,28 +409,23 @@ ZagWebDav >> packageNamed: aString [
 
 { #category : 'request handling' }
 ZagWebDav >> propfindClassTree: segments depth: depth [
-    ^ String streamContents: [ :stream |
-        segments size = 1 ifTrue: [
-            stream nextPutAll: (self makeXmlNodeFor: '/class' isDir: true).
-        ].
-        
-        segments size = 2 ifTrue: [
-            | className class |
-            className := segments second.
-            stream nextPutAll: (self makeXmlNodeFor: ('/class/', className) isDir: true).
-            
-            (depth = '1') ifTrue: [
-                class := Smalltalk globals at: className asSymbol ifAbsent: [ nil ].
-                class ifNotNil: [
-                    class selectors do: [ :sel |
-                        | fileName |
-                        fileName := '/class/', className, '/', (self encodeSelector: sel), '.st'.
-                        stream nextPutAll: (self makeXmlNodeFor: fileName isDir: false).
-                    ].
-                ].
-            ].
-        ].
-    ]
+
+	^ String streamContents: [ :stream |
+			  segments size = 1 ifTrue: [ stream nextPutAll: (self makeXmlNodeFor: '/class' method: nil) ].
+
+			  segments size = 2 ifTrue: [
+					  | className class |
+					  className := segments second.
+					  stream nextPutAll: (self makeXmlNodeFor: '/class/' , className method: nil).
+
+					  depth = '1' ifTrue: [
+							  class := Smalltalk globals at: className asSymbol ifAbsent: [ nil ].
+							  class ifNotNil: [
+									  class selectors do: [ :sel |
+											  | fileName |
+											  fileName := '/class/' , className , '/' , (self encodeSelector: sel).
+											self crTrace: fileName.
+											  stream nextPutAll: (self makeXmlNodeFor: fileName method: class >> sel) ] ] ] ] ]
 ]
 
 { #category : 'request handling' }
@@ -407,7 +435,7 @@ ZagWebDav >> propfindPackageTree: segments depth: depth [
         pkgName := segments first asString.
         
         segments size = 1 ifTrue: [
-            stream nextPutAll: (self makeXmlNodeFor: ('/', pkgName) isDir: true).
+            stream nextPutAll: (self makeXmlNodeFor: ('/', pkgName) method: nil).
             (depth = '1') ifTrue: [
                 | pkg |
                 pkg := self packageNamed: pkgName.
@@ -415,7 +443,7 @@ ZagWebDav >> propfindPackageTree: segments depth: depth [
                     pkg definedClasses do: [ :cls |
                         | path |
                         path := '/', pkgName, '/', cls name asString.
-                        stream nextPutAll: (self makeXmlNodeFor: path isDir: true).
+                        stream nextPutAll: (self makeXmlNodeFor: path method: nil).
                     ].
                 ].
             ].
@@ -424,14 +452,14 @@ ZagWebDav >> propfindPackageTree: segments depth: depth [
         segments size = 2 ifTrue: [
             | className class |
             className := segments second asString.
-            stream nextPutAll: (self makeXmlNodeFor: ('/', pkgName, '/', className) isDir: true).
+            stream nextPutAll: (self makeXmlNodeFor: ('/', pkgName, '/', className) method: nil).
             (depth = '1') ifTrue: [
                 class := Smalltalk globals at: className asSymbol ifAbsent: [ nil ].
                 class ifNotNil: [
                     class selectors do: [ :sel |
                         | fileName |
-                        fileName := '/', pkgName, '/', className, '/', (self encodeSelector: sel), '.st'.
-                        stream nextPutAll: (self makeXmlNodeFor: fileName isDir: false).
+                        fileName := '/', pkgName, '/', className, '/', (self encodeSelector: sel).
+                        stream nextPutAll: (self makeXmlNodeFor: fileName method: class >> sel).
                     ].
                 ].
             ].
@@ -463,7 +491,7 @@ ZagWebDav >> resourceExists: segments [
 	segments size = 3 ifTrue: [
 			className := segments second.
 			class := Smalltalk globals at: className asSymbol ifAbsent: [ nil ].
-			^ class notNil and: [ segments third endsWith: '.st' ] ].
+			^ class notNil ].
 
 	^ false
 ]
