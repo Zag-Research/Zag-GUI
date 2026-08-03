@@ -31,6 +31,7 @@ Class {
 	#classVars : [
 		'BinaryMappings',
 		'Colon',
+		'MountPoints',
 		'ReverseBinaryMappings'
 	],
 	#classInstVars : [
@@ -46,6 +47,7 @@ ZagWebDav class >> initialize [
 
 	<script>
 	Colon := (Character codePoint: 16rA789) asString.
+	MountPoints := Dictionary new.
 	BinaryMappings := {
 		                  (#+ -> '+').
 		                  (#- -> '-').
@@ -109,6 +111,12 @@ Selector,Unicode Character,Code Point,Resulting Filename,OS Compatibility
 		ReverseBinaryMappings at: value put: key ]
 ]
 
+{ #category : 'class initialization' }
+ZagWebDav class >> mount: anObject at: aString [
+
+	MountPoints at: aString put: anObject
+]
+
 { #category : 'accessing' }
 ZagWebDav class >> start [
 	"Start a basic HTTP server on port 8383"
@@ -139,17 +147,23 @@ ZagWebDav class >> stop [
 	server := nil
 ]
 
+{ #category : 'class initialization' }
+ZagWebDav class >> unmount: aString [
+
+	MountPoints removeKey: aString ifAbsent: [  ]
+]
+
 { #category : 'private' }
 ZagWebDav >> decodeSelector: aFilenameString [
-	"Strips the .st extension and converts filename-safe characters back to a Smalltalk selector"
+	"Strips the .st extension if any and converts filename-safe characters back to a Smalltalk selector"
 
 	| baseName |
-	"Remove the file extension"
+	"Remove possible file extension"
 	baseName := aFilenameString withoutSuffix: '.st'.
 
 	ReverseBinaryMappings at: baseName ifPresent: [ :s | ^ s ].
 
-	"2. Convert underscores back to colons"
+	"2. Convert underscores or fake colons back to colons"
 	^ ((baseName copyReplaceAll: Colon with: ':') copyReplaceAll: '_' with: ':') asSymbol
 ]
 
@@ -198,36 +212,35 @@ ZagWebDav >> handleCatchAll: request [
 
 { #category : 'request handling' }
 ZagWebDav >> handleGet: request [
-    | target class sel source segments |
-    segments := request uri segments stripTrailingSlash.
-    
-    (self resourceExists: segments) ifFalse: [ 
-        ^ ZnResponse notFound: request uri 
-    ].
-    
-    target := self extractClassAndSelectorFrom: segments.
-    target ifNil: [ 
-        ^ ZnResponse ok: (ZnEntity text: 'Pharo WebDAV Collection')
-    ].
-    
-    class := target first.
-    sel := target second.
-    
-    (class includesSelector: sel) ifFalse: [ ^ ZnResponse notFound: request uri ].
-    
-    source := (class >> sel) sourceCode.
-    ^ ZnResponse ok: (ZnEntity text: source)
+
+	| target class sel source segments |
+	segments := request uri segments stripTrailingSlash.
+	segments isEmpty ifFalse: [ MountPoints at: segments first ifPresent: [ :mp | mp handleGet: request ] ].
+	(self resourceExists: segments) ifFalse: [ ^ ZnResponse notFound: request uri ].
+
+	target := self extractClassAndSelectorFrom: segments.
+	target ifNil: [ ^ ZnResponse ok: (ZnEntity text: 'Pharo WebDAV Collection') ].
+
+	class := target first.
+	sel := target second.
+
+	(class includesSelector: sel) ifFalse: [ ^ ZnResponse notFound: request uri ].
+
+	source := (class >> sel) sourceCode.
+	^ ZnResponse ok: (ZnEntity text: source)
 ]
 
 { #category : 'request handling' }
 ZagWebDav >> handleLock: request [
-    | token xml entity response |
-    
-    "1. Generate a unique lock token (macOS expects it to start with opaquelocktoken:)"
-    token := 'opaquelocktoken:', UUID new asString.
 
-    "2. Build the required WebDAV lock discovery XML"
-    xml := '<?xml version="1.0" encoding="utf-8" ?>
+	| token xml entity response |
+	request uri segments ifNotNil: [ : segments | MountPoints at: segments first ifPresent: [ :mp | mp handleLock: request ] ].
+
+	"1. Generate a unique lock token (macOS expects it to start with opaquelocktoken:)"
+	token := 'opaquelocktoken:' , UUID new asString.
+
+	"2. Build the required WebDAV lock discovery XML"
+	xml := '<?xml version="1.0" encoding="utf-8" ?>
 <D:prop xmlns:D="DAV:">
   <D:lockdiscovery>
     <D:activelock>
@@ -235,76 +248,76 @@ ZagWebDav >> handleLock: request [
       <D:lockscope><D:exclusive/></D:lockscope>
       <D:depth>infinity</D:depth>
       <D:timeout>Second-3600</D:timeout>
-      <D:locktoken><D:href>', token, '</D:href></D:locktoken>
+      <D:locktoken><D:href>' , token , '</D:href></D:locktoken>
     </D:activelock>
   </D:lockdiscovery>
 </D:prop>'.
 
-    "3. Create the XML entity"
-    entity := ZnEntity with: xml type: ZnMimeType applicationXml.
-    
-    "4. Return the 200 OK response with the all-important Lock-Token header"
-    response := ZnResponse ok: entity.
-    response headers at: 'Lock-Token' put: ('<', token, '>').
-    
-    ^ response
+	"3. Create the XML entity"
+	entity := ZnEntity with: xml type: ZnMimeType applicationXml.
+
+	"4. Return the 200 OK response with the all-important Lock-Token header"
+	response := ZnResponse ok: entity.
+	response headers at: 'Lock-Token' put: '<' , token , '>'.
+
+	^ response
 ]
 
 { #category : 'request handling' }
 ZagWebDav >> handleOptions: request [
-    | response |
-    response := ZnResponse new 
-        statusLine: ZnStatusLine ok;
-        entity: (ZnEntity text: ''); "Forces Content-Length: 0"
-        yourself.
-    response headers 
-        at: 'Allow' put: 'OPTIONS, GET, HEAD, PUT, PROPFIND';
-        at: 'DAV' put: '1, 2'.
-    ^ response
+
+	| response |
+	request uri segments ifNotNil: [ : segments | MountPoints at: segments first ifPresent: [ :mp | mp handleOptions: request ] ].
+
+	response := ZnResponse new
+		            statusLine: ZnStatusLine ok;
+		            entity: (ZnEntity text: '');
+		            "Forces Content-Length: 0"yourself.
+	response headers
+		at: 'Allow' put: 'OPTIONS, GET, HEAD, PUT, PROPFIND, LOCK';
+		at: 'DAV' put: '1, 2'.
+	^ response
 ]
 
 { #category : 'request handling' }
 ZagWebDav >> handlePropfind: request [
-    | segments depth xmlBody response |
-    segments := request uri segments stripTrailingSlash.
-    
-    "If macOS asks for .DS_Store or a non-existent class, return 404!"
-    (self resourceExists: segments) ifFalse: [ 
-        ^ ZnResponse notFound: request uri 
-    ].
-    
-    depth := request headers at: 'Depth' ifAbsent: [ '1' ].
-    
-    xmlBody := String streamContents: [ :stream |
-        stream nextPutAll: '<?xml version="1.0" encoding="utf-8" ?><D:multistatus xmlns:D="DAV:">'.
-        
-        segments isEmptyOrNil ifTrue: [
-            stream nextPutAll: (self makeXmlNodeFor: '/' method: nil).
-            depth = '1' ifTrue: [
-                stream nextPutAll: (self makeXmlNodeFor: '/class' method: nil).
-                self systemPackages do: [ :pkg |
-                    stream nextPutAll: (self makeXmlNodeFor: '/', pkg name asString method: nil).
-                ].
-            ].
-        ] ifFalse: [
-            segments first = 'class' 
-                ifTrue: [ stream nextPutAll: (self propfindClassTree: segments depth: depth) ]
-                ifFalse: [ stream nextPutAll: (self propfindPackageTree: segments depth: depth) ].
-        ].
-        
-        stream nextPutAll: '</D:multistatus>'.
-    ].
-    
-    response := ZnResponse new 
-        statusLine: (ZnStatusLine code: 207); 
-        entity: (ZnStringEntity xml: xmlBody); 
-        yourself.
-        
-    "Safe MIME type without triggering the CharacterSet exception"
-    response entity contentType: (ZnMimeType main: 'text' sub: 'xml').
-    response headers at: 'DAV' put: '1, 2'.
-    
-    ^ response
+
+	| segments depth xmlBody response |
+	segments := request uri segments stripTrailingSlash.
+	
+	"If macOS asks for .DS_Store or a non-existent class, return 404!"
+	(self resourceExists: segments) ifFalse: [ ^ ZnResponse notFound: request uri ].
+
+	depth := request headers at: 'Depth' ifAbsent: [ '1' ].
+
+	xmlBody := String streamContents: [ :stream |
+			           stream nextPutAll: '<?xml version="1.0" encoding="utf-8" ?><D:multistatus xmlns:D="DAV:">'.
+
+			           segments isEmptyOrNil
+				           ifTrue: [
+						           stream nextPutAll: (self makeXmlNodeFor: '/' method: nil).
+						           depth = '1' ifTrue: [
+								           stream nextPutAll: (self makeXmlNodeFor: '/class' method: nil).
+								           MountPoints keysDo: [ :key | stream nextPutAll: (self makeXmlNodeFor: '/' , key method: nil) ].
+								           self systemPackages do: [ :pkg | stream nextPutAll: (self makeXmlNodeFor: '/' , pkg name asString method: nil) ] ] ]
+				           ifFalse: [
+						           MountPoints at: segments first ifPresent: [ :mp | mp propfindMountTree: segments depth: depth ] ifAbsent: [
+								           segments first = 'class'
+									           ifTrue: [ stream nextPutAll: (self propfindClassTree: segments depth: depth) ]
+									           ifFalse: [ stream nextPutAll: (self propfindPackageTree: segments depth: depth) ] ] ].
+
+			           stream nextPutAll: '</D:multistatus>' ].
+
+	response := ZnResponse new
+		            statusLine: (ZnStatusLine code: 207);
+		            entity: (ZnStringEntity xml: xmlBody);
+		            yourself.
+
+	"Safe MIME type without triggering the CharacterSet exception"
+	response entity contentType: (ZnMimeType main: 'text' sub: 'xml').
+	response headers at: 'DAV' put: '1, 2'.
+
+	^ response
 ]
 
 { #category : 'request handling' }
@@ -312,6 +325,7 @@ ZagWebDav >> handlePut: request [
 
 	| segments class sourceCode target |
 	segments := request uri segments stripTrailingSlash.
+	segments isEmpty ifFalse: [ MountPoints at: segments first ifPresent: [ :mp | mp handlePut: request ] ].
 
 	"Ignore hidden OS files like .DS_Store during PUT"
 	(segments last asString beginsWith: '.') ifTrue: [ ^ ZnResponse ok: (ZnEntity text: '') ].
@@ -319,12 +333,13 @@ ZagWebDav >> handlePut: request [
 	"For URL: /Zag-WebDav/ZagWebDav/packageNamed_.st"
 	"segments => #('Zag-WebDav' 'ZagWebDav' 'packageNamed_.st')"
 	target := self extractClassAndSelectorFrom: segments.
-	target ifNil: [ ^ ZnResponse ok: (ZnEntity text: 'Pharo WebDAV Collection') ].
+	target ifNil: [ ^ ZnResponse statusCode: 409 ].
 
 	class := target first.
 
-	sourceCode := request entity contents utf8Decoded withInternalLineEndings.
-	class compile: sourceCode withInternalLineEndings.
+	request contents isEmptyOrNil ifTrue: [ ^ ZnResponse created: request uri ].
+	sourceCode := request entity contents asString withInternalLineEndings.
+	class compile: sourceCode.
 
 	" Return 204 No Content so remote knows the save succeeded without needing a response body"
 	^ ZnResponse noContent
@@ -374,19 +389,16 @@ ZagWebDav >> makeXmlNodeFor: hrefPath method: compiledMethod [
 				  nextPutAll: urlEncodedHref;
 				  nextPutAll: '</D:href><D:propstat><D:prop><D:displayname>';
 				  nextPutAll: escapedName;
-				  nextPutAll: '</D:displayname><D:resourcetype>'.
-
-			  isDir ifTrue: [ s nextPutAll: '<D:collection/>' ].
-
-			  s nextPutAll: '</D:resourcetype>'.
+				  nextPutAll: '</D:displayname>'.
 
 			  isDir
 				  ifTrue: [
-						  s << '<D:getcontenttype>httpd/unix-directory</D:getcontenttype><D:getetag>"dir-1"</D:getetag>'
+						  s << '<D:resourcetype><D:collection/></D:resourcetype>'
+						  << '<D:getcontenttype>httpd/unix-directory</D:getcontenttype><D:getetag>"dir-1"</D:getetag>'
 						  << '<D:getlastmodified>Thu, 30 Jul 2026 12:00:00 GMT</D:getlastmodified>' ]
 				  ifFalse: [
-						  s << '<D:getcontentlength>' << compiledMethod sourceCode size asString << '</D:getcontentlength>'.
-						  s << '<D:getcontenttype>text/plain</D:getcontenttype>' << '<D:getetag>"file-1"</D:getetag>'.
+						  s << '<D:resourcetype/>' << '<D:getcontentlength>' << compiledMethod sourceCode size asString << '</D:getcontentlength>'.
+						  s << '<D:getcontenttype>text/plain; charset=utf-8</D:getcontenttype>' << '<D:getetag>"file-1"</D:getetag>'.
 						  s << '<D:getlastmodified>' << (ZnUtils httpDate: (DateAndTime fromMethodTimestamp: compiledMethod timeStamp))
 						  << '</D:getlastmodified>' ].
 
@@ -396,15 +408,32 @@ ZagWebDav >> makeXmlNodeFor: hrefPath method: compiledMethod [
 ]
 
 { #category : 'private' }
-ZagWebDav >> packageNamed: aString [
-    " find a package by name, using the correct package organizer class "
+ZagWebDav >> packageNamed: aString ifPresent: aBlock [
+	" find a package by name, using the correct package organizer class "
 
-    | organizerClass |
-    organizerClass := Smalltalk globals
-        at: #PackageOrganizer
-        ifAbsent: [ Smalltalk globals at: #RPackageOrganizer ].
-    ^ organizerClass default packageNamed: aString ifAbsent: [ nil ]
+	| organizerClass |
+	organizerClass := Smalltalk globals at: #PackageOrganizer ifAbsent: [ Smalltalk globals at: #RPackageOrganizer ].
+	^ organizerClass default packageNamed: aString ifPresent: aBlock
+]
 
+{ #category : 'request handling' }
+ZagWebDav >> propFindMethods: pkgName segments: segments depth: depth on: stream [
+
+	| className |
+	className := segments second asString.
+	Smalltalk globals at: className asSymbol ifPresent: [ :class |
+			segments size = 2 ifTrue: [
+					stream nextPutAll: (self makeXmlNodeFor: '/' , pkgName , '/' , className method: nil).
+					depth = '1' ifFalse: [ ^ self ].
+					^ class selectors do: [ :sel |
+							  | fileName |
+							  fileName := '/' , pkgName , '/' , className , '/' , (self encodeSelector: sel).
+							  stream nextPutAll: (self makeXmlNodeFor: fileName method: class >> sel) ] ].
+			segments size = 3 ifTrue: [
+					| fileName sel |
+					sel := self decodeSelector: segments last.
+					fileName := '/' , pkgName , '/' , className , '/' , (self encodeSelector: sel).
+					stream nextPutAll: (self makeXmlNodeFor: fileName method: class >> sel) ] ]
 ]
 
 { #category : 'request handling' }
@@ -413,58 +442,36 @@ ZagWebDav >> propfindClassTree: segments depth: depth [
 	^ String streamContents: [ :stream |
 			  segments size = 1 ifTrue: [ stream nextPutAll: (self makeXmlNodeFor: '/class' method: nil) ].
 
-			  segments size = 2 ifTrue: [
-					  | className class |
-					  className := segments second.
-					  stream nextPutAll: (self makeXmlNodeFor: '/class/' , className method: nil).
-
-					  depth = '1' ifTrue: [
-							  class := Smalltalk globals at: className asSymbol ifAbsent: [ nil ].
-							  class ifNotNil: [
-									  class selectors do: [ :sel |
-											  | fileName |
-											  fileName := '/class/' , className , '/' , (self encodeSelector: sel).
-											self crTrace: fileName.
-											  stream nextPutAll: (self makeXmlNodeFor: fileName method: class >> sel) ] ] ] ] ]
+			  segments size >= 2 ifTrue: [
+					  self
+						  propFindMethods: 'class'
+						  segments: segments
+						  depth: depth
+						  on: stream ] ]
 ]
 
 { #category : 'request handling' }
 ZagWebDav >> propfindPackageTree: segments depth: depth [
-    ^ String streamContents: [ :stream |
-        | pkgName |
-        pkgName := segments first asString.
-        
-        segments size = 1 ifTrue: [
-            stream nextPutAll: (self makeXmlNodeFor: ('/', pkgName) method: nil).
-            (depth = '1') ifTrue: [
-                | pkg |
-                pkg := self packageNamed: pkgName.
-                pkg ifNotNil: [
-                    pkg definedClasses do: [ :cls |
-                        | path |
-                        path := '/', pkgName, '/', cls name asString.
-                        stream nextPutAll: (self makeXmlNodeFor: path method: nil).
-                    ].
-                ].
-            ].
-        ].
-        
-        segments size = 2 ifTrue: [
-            | className class |
-            className := segments second asString.
-            stream nextPutAll: (self makeXmlNodeFor: ('/', pkgName, '/', className) method: nil).
-            (depth = '1') ifTrue: [
-                class := Smalltalk globals at: className asSymbol ifAbsent: [ nil ].
-                class ifNotNil: [
-                    class selectors do: [ :sel |
-                        | fileName |
-                        fileName := '/', pkgName, '/', className, '/', (self encodeSelector: sel).
-                        stream nextPutAll: (self makeXmlNodeFor: fileName method: class >> sel).
-                    ].
-                ].
-            ].
-        ].
-    ]
+
+	^ String streamContents: [ :stream |
+			  | pkgName |
+			  pkgName := segments first asString.
+
+			  segments size = 1 ifTrue: [
+					  stream nextPutAll: (self makeXmlNodeFor: '/' , pkgName method: nil).
+					  depth = '1' ifTrue: [
+							  self packageNamed: pkgName ifPresent: [ :pkg |
+									  pkg definedClasses do: [ :cls |
+											  | path |
+											  path := '/' , pkgName , '/' , cls name asString.
+											  stream nextPutAll: (self makeXmlNodeFor: path method: nil) ] ] ] ].
+
+			  segments size >= 2 ifTrue: [
+					  self
+						  propFindMethods: pkgName
+						  segments: segments
+						  depth: depth
+						  on: stream ] ]
 ]
 
 { #category : 'private' }
@@ -479,19 +486,21 @@ ZagWebDav >> resourceExists: segments [
 	"Level 1: Packages"
 	segments size = 1 ifTrue: [
 			segments first = 'class' ifTrue: [ ^ true ].
-			^ (self packageNamed: segments first) notNil ].
+			self packageNamed: segments first ifPresent: [ ^ true ].
+			^ false ].
 
 	"Level 2: Classes"
 	segments size = 2 ifTrue: [
 			className := segments second.
-			class := Smalltalk globals at: className asSymbol ifAbsent: [ nil ].
-			^ class notNil ].
+			class := Smalltalk globals at: className asSymbol ifAbsent: [ ^ false ].
+			^ true ].
 
 	"Level 3: Methods"
 	segments size = 3 ifTrue: [
 			className := segments second.
-			class := Smalltalk globals at: className asSymbol ifAbsent: [ nil ].
-			^ class notNil ].
+			class := Smalltalk globals at: className asSymbol ifAbsent: [ ^ false ].
+			" check for the method exists "
+			^ class includesSelector: (self decodeSelector: segments third) ].
 
 	^ false
 ]
