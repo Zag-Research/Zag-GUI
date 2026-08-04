@@ -29,10 +29,7 @@ Class {
 	#name : 'ZagWebDav',
 	#superclass : 'Object',
 	#classVars : [
-		'BinaryMappings',
-		'Colon',
-		'MountPoints',
-		'ReverseBinaryMappings'
+		'MountPoints'
 	],
 	#classInstVars : [
 		'server'
@@ -46,69 +43,7 @@ Class {
 ZagWebDav class >> initialize [
 
 	<script>
-	Colon := (Character codePoint: 16rA789) asString.
-	MountPoints := Dictionary new.
-	BinaryMappings := {
-		                  (#+ -> '+').
-		                  (#- -> '-').
-		                  (#* -> '×').
-		                  (#/ -> '÷').
-		                  (#'\\' -> '⧵⧵').
-		                  (#= -> '=').
-		                  (#'==' -> '==').
-		                  (#'~=' -> '~=').
-		                  (#< -> '‹').
-		                  (#'<=' -> '≤').
-		                  (#> -> '›').
-		                  (#'>=' -> '≥').
-		                  (#@ -> '@').
-		                  (#, -> ',').
-		                  (#~ -> '~').
-		                  (#| -> '|').
-		                  (#& -> '&').
-		                  (#'=~' -> '=~').
-		                  (#'@@' -> '@@').
-		                  (#'\\=' -> '⧵⧵=').
-		                  (#'**' -> '××').
-		                  (#'*=' -> '×=').
-		                  (#'//' -> '÷÷').
-		                  (#'-=' -> '-=').
-		                  (#'==>' -> '==›').
-		                  (#'->' -> '-›').
-		                  (#'>>' -> '››').
-		                  (#'--' -> '--').
-		                  (#'~~>' -> '~~›').
-		                  (#\ -> '⧵').
-		                  (#'\\\' -> '⧵⧵⧵').
-		                  (#% -> '%').
-		                  (#'~~' -> '~~').
-		                  (#'=>' -> '=›').
-		                  (#'+=' -> '+=').
-		                  (#'<<' -> '_').
-		                  (#'+*' -> '+×').
-		                  (#'/=' -> '÷=').
-		                  (#'@=' -> '@=').
-		                  (#'>>>' -> '›››').
-		                  (#'<-' -> '‹-').
-		                  (#? -> '﹖') } asDictionary.
-	ReverseBinaryMappings := Dictionary new.
-	BinaryMappings keysAndValuesDo: [ :key :value | "	
-Selector,Unicode Character,Code Point,Resulting Filename,OS Compatibility
->=,≥ (Greater than or equal),U+2265,≥.st,✅ All OSs
-<=,≤ (Less than or equal),U+2264,≤.st,✅ All OSs
-~=,≠ (Not equal),U+2260,≠.st,✅ All OSs
-==,≡ (Identical / Equivalent),U+2261,≡.st,✅ All OSs
-*,× (Multiplication sign),U+00D7,×.st,✅ All OSs (Replaces forbidden ASCII *)
-/,÷ (Division sign),U+00F7,÷.st,✅ All OSs (Replaces forbidden ASCII /)
-\,⧵ (Reverse solidus op),U+29F5,⧵.st,✅ All OSs (Replaces forbidden ASCII \)
-|,∣ (Divides / Vertical bar),U+2223,∣.st,✅ All OSs (Replaces forbidden ASCII |)
-<,‹ or ＜ (Single Guillemet / Fullwidth),U+2039 / U+FF1C,‹.st,✅ All OSs (Replaces forbidden ASCII <)
->,› or ＞ (Single Guillemet / Fullwidth),U+203B / U+FF1E,›.st,✅ All OSs (Replaces forbidden ASCII >)
-+,+ (ASCII Plus),U+002B,+.st,✅ All OSs
--,- (ASCII Minus),U+002D,-.st,✅ All OSs
-@,@ (ASCII At),U+0040,@.st,✅ All OSs
-"","","", (ASCII Comma)"",U+002C,"","",✅ All OSs"
-		ReverseBinaryMappings at: value put: key ]
+	MountPoints := Dictionary new
 ]
 
 { #category : 'class initialization' }
@@ -154,31 +89,6 @@ ZagWebDav class >> unmount: aString [
 ]
 
 { #category : 'private' }
-ZagWebDav >> decodeSelector: aFilenameString [
-	"Strips the .st extension if any and converts filename-safe characters back to a Smalltalk selector"
-
-	| baseName |
-	"Remove possible file extension"
-	baseName := aFilenameString withoutSuffix: '.st'.
-
-	ReverseBinaryMappings at: baseName ifPresent: [ :s | ^ s ].
-
-	"2. Convert underscores or fake colons back to colons"
-	^ ((baseName copyReplaceAll: Colon with: ':') copyReplaceAll: '_' with: ':') asSymbol
-]
-
-{ #category : 'private' }
-ZagWebDav >> encodeSelector: aSymbol [
-	" encode binary operators "
-
-	aSymbol isBinary ifTrue: [
-		^ BinaryMappings at: aSymbol asSymbol ifAbsentPut: [ String streamContents: [ :s | s << 'op_' << aSymbol ] ] ].
-
-	"Replaces colons with underscores for file system compatibility"
-	^ aSymbol asString copyReplaceAll: ':' with: Colon
-]
-
-{ #category : 'private' }
 ZagWebDav >> escapeXml: aString [
     ^ ((aString copyReplaceAll: '&' with: '&amp;')
         copyReplaceAll: '<' with: '&lt;')
@@ -197,7 +107,7 @@ ZagWebDav >> extractClassAndSelectorFrom: segments [
 	fileName := segments third.
 
 	class := Smalltalk globals at: className asSymbol ifAbsent: [ ^ nil ].
-	sel := self decodeSelector: fileName.
+	sel := ZagWebDavTranslate toSelector: fileName.
 
 	^ {
 		  class.
@@ -427,12 +337,12 @@ ZagWebDav >> propFindMethods: pkgName segments: segments depth: depth on: stream
 					depth = '1' ifFalse: [ ^ self ].
 					^ class selectors do: [ :sel |
 							  | fileName |
-							  fileName := '/' , pkgName , '/' , className , '/' , (self encodeSelector: sel).
+							  fileName := '/' , pkgName , '/' , className , '/' , (ZagWebDavTranslate toFilename: sel).
 							  stream nextPutAll: (self makeXmlNodeFor: fileName method: class >> sel) ] ].
 			segments size = 3 ifTrue: [
 					| fileName sel |
-					sel := self decodeSelector: segments last.
-					fileName := '/' , pkgName , '/' , className , '/' , (self encodeSelector: sel).
+					sel := ZagWebDavTranslate toSelector: segments last.
+					fileName := '/' , pkgName , '/' , className , '/' , (ZagWebDavTranslate toFilename:  sel).
 					stream nextPutAll: (self makeXmlNodeFor: fileName method: class >> sel) ] ]
 ]
 
@@ -500,7 +410,7 @@ ZagWebDav >> resourceExists: segments [
 			className := segments second.
 			class := Smalltalk globals at: className asSymbol ifAbsent: [ ^ false ].
 			" check for the method exists "
-			^ class includesSelector: (self decodeSelector: segments third) ].
+			^ class includesSelector: (ZagWebDavTranslate toSelector: segments third) ].
 
 	^ false
 ]
