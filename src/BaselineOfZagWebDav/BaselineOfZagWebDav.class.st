@@ -31,8 +31,8 @@ BaselineOfZagWebDav >> defineDependencies: spec [
 BaselineOfZagWebDav >> defineGroups: spec [
 	"Convenient targets for Metacello loading"
 
-	spec
-		group: 'default' with: #( 'Zag-WebDav' )
+	spec group: 'default' with: #( 'Zag-WebDav' ).
+	spec group: 'tests' with: #( 'Zag-WebDav-Tests' )
 ]
 
 { #category : 'private - definitions' }
@@ -41,5 +41,6 @@ BaselineOfZagWebDav >> definePackages: spec [
 
 	(Smalltalk hasClassNamed: #ZnResponse)
 		ifTrue: [ spec package: 'Zag-WebDav' ]
-		ifFalse: [ spec package: 'Zag-WebDav' with: [ spec requires: #( 'ZincHTTPComponents' ) ] ]
+		ifFalse: [ spec package: 'Zag-WebDav' with: [ spec requires: #( 'ZincHTTPComponents' ) ] ].
+	spec package: 'Zag-WebDav-Tests' with: [ spec requires: #('Zag-WebDav') ].
 ]
