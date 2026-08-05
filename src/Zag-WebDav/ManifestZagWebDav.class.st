@@ -1,6 +1,3 @@
-"
-Please describe the package using the class comment of the included manifest class. The manifest class also includes other additional metadata for the package. These meta data are used by other tools such as the SmalllintManifestChecker and the critics Browser
-"
 Class {
 	#name : 'ManifestZagWebDav',
 	#superclass : 'PackageManifest',
@@ -20,14 +17,14 @@ ManifestZagWebDav class >> ruleClassNotReferencedRuleV1FalsePositive [
 ManifestZagWebDav class >> ruleLongMethodsRuleV1FalsePositive [
 
 	<ignoreForCoverage>
-	^ #(#(#(#RGMethodDefinition #(#ZagWebDav #resourceExists: #false)) #'2026-08-03T08:31:22.378937-04:00') #(#(#RGMethodDefinition #(#ZagWebDav #makeXmlNodeFor:method: #false)) #'2026-08-03T09:25:02.99014-04:00') #(#(#RGMethodDefinition #(#ZagWebDav #handlePropfind: #false)) #'2026-08-03T09:32:51.317118-04:00') )
+	^ #(#(#(#RGMethodDefinition #(#ZagWebDav #resourceExists: #false)) #'2026-08-03T08:31:22.378937-04:00') #(#(#RGMethodDefinition #(#ZagWebDav #makeXmlNodeFor:target: #false)) #'2026-08-03T09:25:02.99014-04:00') #(#(#RGMethodDefinition #(#ZagWebDav #handlePropfind: #false)) #'2026-08-03T09:32:51.317118-04:00') #(#(#RGMethodDefinition #(#ZagWebDav #propFindMethods:segments:depth:on: #false)) #'2026-08-05T10:15:08.384672-04:00') #(#(#RGMethodDefinition #(#ZagWebDav #handlePut: #false)) #'2026-08-05T13:40:28.802938-04:00') )
 ]
 
 { #category : 'code-critics' }
 ManifestZagWebDav class >> ruleReCyclomaticComplexityRuleV1FalsePositive [
 
 	<ignoreForCoverage>
-	^ #(#(#(#RGMethodDefinition #(#ZagWebDav #makeXmlNodeFor:method: #false)) #'2026-07-30T13:37:03.566438-04:00') #(#(#RGMethodDefinition #(#ZagWebDav #handlePropfind: #false)) #'2026-08-03T09:32:47.427647-04:00') )
+	^ #(#(#(#RGMethodDefinition #(#ZagWebDav #makeXmlNodeFor:target: #false)) #'2026-07-30T13:37:03.566438-04:00') #(#(#RGMethodDefinition #(#ZagWebDav #handlePropfind: #false)) #'2026-08-03T09:32:47.427647-04:00') #(#(#RGMethodDefinition #(#ZagWebDav #resourceExists: #false)) #'2026-08-05T00:03:34.932102-04:00') #(#(#RGMethodDefinition #(#ZagWebDav #propFindMethods:segments:depth:on: #false)) #'2026-08-05T11:55:28.397106-04:00') )
 ]
 
 { #category : 'code-critics' }
