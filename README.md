@@ -11,7 +11,17 @@ In Pharo simply do `ZagWebDav start` and then there will be a WebDav server at l
 
 Once mounted you can open any class with `zed /Volumes/127.0.0.1/class/OrderedCollection` and see all the methods or `vim /Volumes/127.0.0.1/A-Package` to see all classes in the package.
 
-It is somewhat featureful except for security. From an editor, you can edit or create methods and class Comments, although not create classes or change properties like categories, inheritance, instance variables, or class variables. You can also "mount" a filesystem on the Pharo side which, for example, can let you implement a read-only Zag image at `/Volumes/127.0.0.1/zagImage/SomeClass/someUnarySelector/`.
+It is somewhat featureful except for security. From an editor, you can edit or create methods and class Comments, although not create classes or change properties like categories, inheritance, instance variables, or class variables. The methods are presented with no file extension, so if you want to see them presented as Smalltalk, you can add the following to your Zed settings:
+```json
+  "file_types": {
+    "Smalltalk": [
+      "**/class_methods/!*.*",
+      "**/instance_methods/!*.*"
+    ]
+  },
+```
+
+You can also "mount" a filesystem on the Pharo side which, for example, can let you implement a read-only Zag image at `/Volumes/127.0.0.1/zagImage/SomeClass/someUnarySelector/`.
 
 This has no security enabled, so it exposes the image to any program on localhost. But it's only visible on 127.0.0.1, so shouldn't be an issue on a personal workstation.
 
