@@ -3,6 +3,19 @@ I am a WebDav client.
 
 My primary motivation is to serve Packages, Classes, and Methods to an editor such as Zed.
 
+I present the image as:
+- /A-Package/AClass/Comment.md
+- /A-Package/AClass/instance_methods/aMethod
+- /A-Package/AClass/class_methods/aMethod
+
+There is no support for creating classes or changing properties like categories, inheritance, instance variables, or class variables. The methods are presented with no file extension by using Unicode analogs for reserved characters such as `:`, `?`, and `*`.
+
+The current thinking is that many of those missing features are not necessary for an editor to read/write virtual files, but that they could be added in the future using paths like:
+- `/A-Package/AClass/properties.json`
+- `/A-Package/AClass/class_variables.json`
+- `/A-Package/AClass/class_methods/variables.json`
+- `/A-Package/AClass/instance_methods/variables.json`
+
 ### API:
 - `ZagWebDav start` - start a server on default port
 - `ZagWebDav stop` - stop the server
@@ -24,6 +37,7 @@ Currently, our server ""fakes"" locking by generating a UUID lock token on LOCK 
 3. **COPY / MOVE:** Handles file renaming and moving (which in your domain would translate to renameClass:, compile:inCategory:, or refactoring selectors).
 4. **DELETE:** Handles deleting files/folders (removing methods or unhousing classes).
 5. **ETags & Conditional Requests:** If-Match and If-None-Match headers using entity tags to prevent two clients from overwriting each other's changes if locking isn't used. An etag is a version number of a file, used for caching and preventing overwrite if a file has changed since read.
+
 "
 Class {
 	#name : 'ZagWebDav',
@@ -42,8 +56,9 @@ Class {
 { #category : 'class initialization' }
 ZagWebDav class >> initialize [
 
-	<script>
+	<script> " make executable from the GUI "
 	MountPoints := Dictionary new
+
 ]
 
 { #category : 'class initialization' }
